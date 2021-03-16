@@ -23,7 +23,7 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QDate
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox
+from qgis.PyQt.QtWidgets import QAction, QMessageBox, QTableWidgetItem
 
 from qgis.core import QgsProject, QgsFeature, QgsGeometry, QgsPoint
 
@@ -31,6 +31,7 @@ from qgis.core import QgsProject, QgsFeature, QgsGeometry, QgsPoint
 from .resources import *
 # Import the code for the dialog
 from .new_raptor_dialog import NewRaptorDialog
+from .impact_table import DlgTable
 import os.path
 
 
@@ -216,6 +217,9 @@ class NewRaptor:
             missing_layers.append('Raptor Nests')
         if not 'Raptor Buffer' in map_layers:
             missing_layers.append('Raptor Buffer')
+        if not 'Linear Buffer' in map_layers:
+            missing_layers.append('Linear Buffer')
+
         if missing_layers:
             msg = 'The following layres are missing from ths project\n'
             for lyr in missing_layers:
@@ -237,6 +241,7 @@ class NewRaptor:
             # irá retornar uma lista com o as camdas com nome Raptor Nests, mas iremos pegar apenas a primeira camadd
             lyrNests = QgsProject.instance().mapLayersByName('Raptor Nests')[0]
             lyrBuffer = QgsProject.instance().mapLayersByName('Raptor Buffer')[0]
+            lyrLinear = QgsProject.instance().mapLayersByName('Linear Buffer')[0]
             # Irá pegar o ultimo valor de índice
             idxNestID = lyrNests.fields().indexOf('Nest_ID')
             valNestID = lyrNests.maximumValue(idxNestID) + 1
@@ -280,10 +285,29 @@ class NewRaptor:
             pr.addFeatures([ftrNest])
             lyrBuffer.reload()
 
+            dlgTable = DlgTable()
+            dlgTable.setWindowTitle(f"Impacts Table for Nest {valNestID}")
 
+            # Find linear projects that will impacted and report then in the table
+            bb = buffer.boundingBox()
+            linears = lyrLinear.getFeatures(bb)
+            for linear in linears:
+                valID = linear.attribute('Project')
+                valType = linear.attribute('type')
+                valDistance = linear.geometry().distance(geom)
+                if valDistance < valBuffer:
+                    #populate table with Linear data
+                    row = dlgTable.tblImpacts.rowCount()
+                    dlgTable.tblImpacts.insertRow(row)
+                    dlgTable.tblImpacts.setItem(row, 0, QTableWidgetItem(str(valID)))
+                    dlgTable.tblImpacts.setItem(row, 1, QTableWidgetItem(valType))
+                    twi = QTableWidgetItem(f"{valDistance:4.5f}")
+                    twi.setTextAlignment(QtCore.Qt.AlignRight)
+                    dlgTable.tblImpacts.setItem(row, 2, twi)
 
-
-
+            dlgTable.tblImpacts.sortItems(2)
+            dlgTable.show()
+            dlgTable.exec_()
 
         else:
             QMessageBox.information(self.dlg, "Message", "Should only run if cancelled")
